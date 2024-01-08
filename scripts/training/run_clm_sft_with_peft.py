@@ -245,6 +245,7 @@ class MyTrainingArguments(TrainingArguments):
     quant_type: Optional[str] = field(default="nf4")
     load_in_kbits: Optional[int] = field(default=16)
     full_finetuning : Optional[bool] = field(default=False)
+    use_zero3: Optional[bool] = field(default=False)
 
 
 logger = logging.getLogger(__name__)
@@ -401,7 +402,14 @@ def main():
         quantization_config = None
     if quantization_config is not None:
         logger.info(f"quantization_config:{quantization_config.to_dict()}")
-    device_map = {"":int(os.environ.get("LOCAL_RANK") or 0)}
+
+    if training_args.use_zero3:
+        device_map = None
+        low_cpu_mem_usage = False
+    else:
+        device_map = {"":int(os.environ.get("LOCAL_RANK") or 0)}
+        low_cpu_mem_usage = True
+    # DeepSpeed Zero-3 is not compatible with `low_cpu_mem_usage=True` or with passing a `device_map`
     model = LlamaForCausalLM.from_pretrained(
         model_args.model_name_or_path,
         config=config,
@@ -409,7 +417,7 @@ def main():
         revision=model_args.model_revision,
         use_auth_token=True if model_args.use_auth_token else None,
         torch_dtype=torch_dtype,
-        low_cpu_mem_usage=True,
+        low_cpu_mem_usage=low_cpu_mem_usage,
         device_map=device_map,
         load_in_4bit=load_in_4bit,
         load_in_8bit=load_in_8bit,
